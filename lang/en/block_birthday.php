@@ -1,6 +1,7 @@
 <?PHP // $Id: block_birthday.php,v 1.6 2010/07/22 18:44:21 arborrow Exp $ 
       // block_birthday.php - created with Moodle 1.8.2+ 
 
+$string['pluginname'] = 'Birthday';
 $string['birthday'] = 'Birthday';
 $string['blockname'] = 'Birthday';
 $string['blockshow'] = 'Show block when there are no birthdays';

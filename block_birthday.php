@@ -37,8 +37,8 @@ function get_month_day($date, $format='ISO') {
  
 class block_birthday extends block_base {
     function init() {
-        $this->title = get_string('birthday','block_birthday'); //can be used for multiple languages as it gets developed further
-        $this->version = 2008041601;
+        $this->title = get_string('pluginname','block_birthday'); //can be used for multiple languages as it gets developed further
+        $this->version = 2010010301;
     }
     // $date a string value of the user profile field data
     // $format is a string of the $dateformat - either ISO, USA, or EUR
