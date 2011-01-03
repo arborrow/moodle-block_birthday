@@ -53,7 +53,7 @@ class block_birthday extends block_base {
     }
     
     function get_content() {
-        global $USER, $CFG, $COURSE;
+        global $USER, $CFG, $DB, $OUTPUT;
         $cfg_birthday = get_config('block/birthday');
         
         if ($this->content !== NULL) {
@@ -68,83 +68,58 @@ class block_birthday extends block_base {
             return $this->content;
         }
 
-// make sure config variables are defined - if not, set them to default values
+        // make sure config variables are defined - if not, set them to default values
         
         if (!isset($cfg_birthday->block_birthday_fieldname)) {
-          $fieldname = 'DOB';            //this is the default
-         }
-          else {
-           $fieldname = $cfg_birthday->block_birthday_fieldname ;
-          }
-
-        if (!isset($cfg_birthday->block_birthday_dateformat)) {
-          $dateformat = 'ISO';            //this is the default
-         }
-          else {
-           $dateformat = $cfg_birthday->block_birthday_dateformat ;
-          }
-
-        if (!isset($cfg_birthday->block_birthday_days)) {
-          $days = 0; //this is the default
-         }
-          else {
-           $days = $cfg_birthday->block_birthday_days ;
-          }          
-
-          switch ($dateformat) {
-              case 'ISO' : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
-                break;
-              case 'EUR' : $sqldate = 'str_to_date(ud.data,"%d.%m.%Y")';
-                break;
-              case 'EUR_ES' : $sqldate = 'str_to_date(ud.data,"%d/%m/%Y")';
-                break;
-              case 'USA' : $sqldate = 'str_to_date(ud.data,"%m.%d.%Y")';
-                break;
-              default : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
-          }
-
-// get the field id for the given fieldname
-         if (isset($fieldname)) { 
-          $sql = "SELECT * FROM {$CFG->prefix}user_info_field WHERE shortname='{$fieldname}'" ;
-         }
-            if ($field = get_record_sql($sql)) { 
-               $fieldid = $field->id; 
-            }
-                else { 
-                   $fieldid = 0; //no custom profile field with that shortname was found
-                }
-       
-        // Get context so we can check capabilities.
-        $context = get_context_instance(CONTEXT_COURSE, $COURSE->id);
-
-        //Calculate if we are in separate groups
-        $isseparategroups = ($COURSE->groupmode == SEPARATEGROUPS 
-                             && $COURSE->groupmodeforce
-                             && !has_capability('moodle/site:accessallgroups', $context));
-
-  //Get the user current group
-        $currentgroup = $isseparategroups ? groups_get_course_group($COURSE) : NULL;
-
-        $groupmembers = "";
-        $groupselect = "";
-
-        //Add this to the SQL to show only group users
-        if ($currentgroup !== NULL) {
-            $groupmembers = ",  {$CFG->prefix}groups_members gm ";
-            $groupselect = " AND u.id = gm.userid AND gm.groupid = '$currentgroup'";
+            $fieldname = 'DOB';            //this is the default
+        } else {
+            $fieldname = $cfg_birthday->block_birthday_fieldname ;
         }
 
-        $users = array();
-// there are probably more eloquent ways of getting the current user's time/date information
+        if (!isset($cfg_birthday->block_birthday_dateformat)) {
+            $dateformat = 'ISO';            //this is the default
+        } else {
+            $dateformat = $cfg_birthday->block_birthday_dateformat ;
+        }
+
+        if (!isset($cfg_birthday->block_birthday_days)) {
+            $days = 0; //this is the default
+        } else {
+            $days = $cfg_birthday->block_birthday_days ;
+        }          
+
+        switch ($dateformat) {
+            case 'ISO' : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
+            break;
+            case 'EUR' : $sqldate = 'str_to_date(ud.data,"%d.%m.%Y")';
+            break;
+            case 'EUR_ES' : $sqldate = 'str_to_date(ud.data,"%d/%m/%Y")';
+            break;
+            case 'USA' : $sqldate = 'str_to_date(ud.data,"%m.%d.%Y")';
+            break;
+            default : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
+        }
+
+        // get the field id for the given fieldname
+        if (isset($fieldname)) { 
+            $sql = "SELECT * FROM {$CFG->prefix}user_info_field WHERE shortname='{$fieldname}'" ;
+        }
+        if ($field = get_record_sql($sql)) { 
+            $fieldid = $field->id; 
+        } else { 
+            $fieldid = 0; //no custom profile field with that shortname was found
+        }
+       
+        // there are probably more eloquent ways of getting the current user's time/date information
         for ($i=0; $i <= $days; $i++) {
         $timezone = empty($USER->timezone) ? $CFG->timezone : $USER->timezone;
         $userdate = usergetdate((time()+($i*86400)),$timezone);
         $usermonth = $userdate['mon'];
         $userday = $userdate['mday'];
         
-        $SQL = "SELECT u.id, u.username, u.firstname, u.lastname, u.picture, u.lastaccess, ud.data, extract(month from {$sqldate}) as month, extract(day from {$sqldate}) as day
-                FROM {$CFG->prefix}user_info_data ud,
-                     {$CFG->prefix}user u
+        $sql = "SELECT u.id, u.username, u.firstname, u.lastname, u.picture, u.lastaccess, ud.data, extract(month from {$sqldate}) as month, extract(day from {$sqldate}) as day
+                FROM {user_info_data} ud,
+                     {user} u
                 WHERE 
                       ud.userid = u.id 
                       AND extract(month from {$sqldate}) = $usermonth
@@ -153,22 +128,22 @@ class block_birthday extends block_base {
                       AND u.deleted = 0
                 ORDER BY month, day, u.lastname, u.firstname ASC";
                 
-        $pcontext = get_related_contexts_string($context);
+        $pcontext = get_related_contexts_string($this->page->context);
     
-        if ($pusers = get_records_sql($SQL, 0, 50)) {   // We'll just take the most recent 50 maximum
-
+        if ($pusers = $DB->get_records_sql($sql, 0, 50)) {   // We'll just take the most recent 50 maximum
+            $users = array();
             foreach ($pusers as $puser) {
                 
                 // if current user can't view hidden role assignment in this context and 
                 // user has a hidden role assigned at this context or any parent contexts,
                 // ignore this user
                 
-                $SQL = "SELECT id,id FROM {$CFG->prefix}role_assignments
+                $sql = "SELECT id,id FROM {role_assignments}
                         WHERE userid = $puser->id
                         AND contextid $pcontext
                         AND hidden = 1";
                 
-                if (!has_capability('moodle/role:viewhiddenassigns', $context) && record_exists_sql($SQL)) {
+                if (!has_capability('moodle/role:viewhiddenassigns', $this->page->context) && $DB->record_exists_sql($sql)) {
                     // can't see this user as the current user has no capability
                     // and this user has a hidden assignment at this context or higher
                     continue;  
@@ -177,7 +152,7 @@ class block_birthday extends block_base {
                 if ($COURSE->id == SITEID) {
                     ;  // Site-level
                 } else { // Course-level
-                    if ((!has_capability('moodle/course:viewparticipants', $context, $USER->id)) or (!has_capability('moodle/course:view',$context, $puser->id))) {
+                    if ((!has_capability('moodle/course:viewparticipants', $this->page->context, $USER->id)) or (!has_capability('moodle/course:view',$this->page->context, $puser->id))) {
                         continue;
                     }
                 }
