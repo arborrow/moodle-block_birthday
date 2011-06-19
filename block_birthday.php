@@ -4,6 +4,16 @@
  * An elementary way of getting a list of the students with birthdays
  * based off of the site_online_users block
  */
+
+
+/**
+ * Returns the month and day for a particular date in the specified format
+ *
+ * @param string $date the date string stored in the database
+ * @param string $format the date format the date string is stored in (default ISO, EUR, EUR_ES or USA) 
+ * @return string used to search the database
+ */
+
 function get_month_day($date, $format='ISO') {
 
         $year = date('Y');
@@ -38,10 +48,8 @@ function get_month_day($date, $format='ISO') {
 class block_birthday extends block_base {
     function init() {
         $this->title = get_string('pluginname','block_birthday'); //can be used for multiple languages as it gets developed further
-        $this->version = 2010010301;
+        $this->version = 2011061901;
     }
-    // $date a string value of the user profile field data
-    // $format is a string of the $dateformat - either ISO, USA, or EUR
         
     function has_config() {return true;}
 
