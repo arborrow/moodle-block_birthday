@@ -1,244 +1,177 @@
-<?php //$Id: block_birthday.php,v 1.15 2010/07/24 15:32:43 arborrow Exp $
+<?php
 
 /**
- * An elementary way of getting a list of the students with birthdays
- * based off of the site_online_users block
+ * This block needs to be reworked.
+ * The new roles system does away with the concepts of rigid student and
+ * teacher roles.
  */
-
-
-/**
- * Returns the month and day for a particular date in the specified format
- *
- * @param string $date the date string stored in the database
- * @param string $format the date format the date string is stored in (default ISO, EUR, EUR_ES or USA) 
- * @return string used to search the database
- */
-
-function get_month_day($date, $format='ISO') {
-
-        $year = date('Y');
-        
-        switch ($format) {
-            case 'USA': 
-                $period = explode('.',$date);
-                $month = $period[0];
-                $day = $period[1]; 
-                break;
-            case 'ISO': 
-                $period = explode('-',$date); 
-                $month = $period[1];
-                $day = $period[2];
-                break;
-            case 'EUR': 
-                $period = explode('.',$date); 
-                $month = $period[1];
-                $day = $period[0];
-                break;
-            case 'EUR_ES':
-                $period = explode('/',$date);
-                $month = $period[1];
-                $day = $period[0];
-                break;
-            default : error('Invalid field type'); 
-        }
-            $return = date('M d',mktime(0,0,0,$month,$day,$year)); 
-            return $return;         
-    }
- 
 class block_birthday extends block_base {
     function init() {
-        $this->title = get_string('pluginname','block_birthday'); //can be used for multiple languages as it gets developed further
-        $this->version = 2011061901;
+        $this->title = get_string('pluginname','block_birthday');
+	$this->version = 2011061901;
     }
-        
+
     function has_config() {return true;}
 
-    function config_save($data) {
-        foreach ($data as $name => $value) {
-            set_config($name, $value,'block/birthday');
-        }
-        return true;
-    }
-    
     function get_content() {
         global $USER, $CFG, $DB, $OUTPUT;
-        $cfg_birthday = get_config('block/birthday');
-        
+
         if ($this->content !== NULL) {
             return $this->content;
         }
 
-        $this->content = new stdClass;
+		$this->content = new stdClass;
         $this->content->text = '';
         $this->content->footer = '';
-        
+
         if (empty($this->instance)) {
             return $this->content;
         }
 
-        // make sure config variables are defined - if not, set them to default values
-        
-        if (!isset($cfg_birthday->block_birthday_fieldname)) {
-            $fieldname = 'DOB';            //this is the default
-        } else {
-            $fieldname = $cfg_birthday->block_birthday_fieldname ;
+		//initialize variables
+        $cfg_birthday = get_config('block_birthday');
+
+		if (!isset($cfg_birthday->fieldname)) { //fieldname is now an the user_info_field id
+		    $fieldname = 0;
+		} else {
+    	        $fieldname = $cfg_birthday->fieldname;
+		}
+		if (!isset($cfg_birthday->daysahead)) {
+	    	$daysahead = O;
+		} else {
+    		$daysahead = $cfg_birthday->daysahead;
+		}
+		if (!isset($cfg_birthday->visible)) {
+		    $visible = 'Hide';
+		} else {
+            $visible = $cfg_birthday->visible;
+		}
+
+		$timezone = empty($USER->timezone) ? $CFG->timezone : $USER->timezone;
+	$users = array();
+
+        //Calculate if we are in separate groups
+        $isseparategroups = ($this->page->course->groupmode == SEPARATEGROUPS
+                             && $this->page->course->groupmodeforce
+                             && !has_capability('moodle/site:accessallgroups', $this->page->context));
+
+        //Get the user current group
+        $currentgroup = $isseparategroups ? groups_get_course_group($this->page->course) : NULL;
+
+        $groupmembers = "";
+        $groupselect  = "";
+        $params = array();
+
+        //Add this to the SQL to show only group users
+        if ($currentgroup !== NULL) {
+            $groupmembers = ", {groups_members} gm";
+            $groupselect = "AND u.id = gm.userid AND gm.groupid = :currentgroup";
+            $params['currentgroup'] = $currentgroup;
         }
 
-        if (!isset($cfg_birthday->block_birthday_dateformat)) {
-            $dateformat = 'ISO';            //this is the default
-        } else {
-            $dateformat = $cfg_birthday->block_birthday_dateformat ;
-        }
+        $userfields = user_picture::fields('u', array('username'));
+		for ($i=0; $i <= $daysahead; $i++) {
+  			$userdate = usergetdate((time()+($i*86400)),$timezone);
+			$usermonth = $userdate['mon'];
+			$userday = $userdate['mday'];
 
-        if (!isset($cfg_birthday->block_birthday_days)) {
-            $days = 0; //this is the default
-        } else {
-            $days = $cfg_birthday->block_birthday_days ;
-        }          
+        	if ($this->page->course->id == SITEID or $this->page->context->contextlevel < CONTEXT_COURSE) {  // Site-level
 
-        switch ($dateformat) {
-            case 'ISO' : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
-            break;
-            case 'EUR' : $sqldate = 'str_to_date(ud.data,"%d.%m.%Y")';
-            break;
-            case 'EUR_ES' : $sqldate = 'str_to_date(ud.data,"%d/%m/%Y")';
-            break;
-            case 'USA' : $sqldate = 'str_to_date(ud.data,"%m.%d.%Y")';
-            break;
-            default : $sqldate = 'str_to_date(ud.data,"%Y-%m-%d")';
-        }
-
-        // get the field id for the given fieldname
-        if (isset($fieldname)) { 
-            $sql = "SELECT * FROM {$CFG->prefix}user_info_field WHERE shortname='{$fieldname}'" ;
-        }
-        if ($field = get_record_sql($sql)) { 
-            $fieldid = $field->id; 
-        } else { 
-            $fieldid = 0; //no custom profile field with that shortname was found
-        }
-       
-        // there are probably more eloquent ways of getting the current user's time/date information
-        for ($i=0; $i <= $days; $i++) {
-        $timezone = empty($USER->timezone) ? $CFG->timezone : $USER->timezone;
-        $userdate = usergetdate((time()+($i*86400)),$timezone);
-        $usermonth = $userdate['mon'];
-        $userday = $userdate['mday'];
-        
-        $sql = "SELECT u.id, u.username, u.firstname, u.lastname, u.picture, u.lastaccess, ud.data, extract(month from {$sqldate}) as month, extract(day from {$sqldate}) as day
-                FROM {user_info_data} ud,
-                     {user} u
-                WHERE 
-                      ud.userid = u.id 
-                      AND extract(month from {$sqldate}) = $usermonth
-                      AND extract(day from {$sqldate})  = $userday
-                      AND ud.fieldid={$fieldid}
-                      AND u.deleted = 0
+		 	$sql = "SELECT u.id, u.username, u.firstname, u.lastname, u.picture, u.lastaccess, 
+					u.imagealt, u.email, ud.data, month(from_unixtime(ud.data)) as month, day(from_unixtime(ud.data)) as day
+                FROM {user_info_data} ud, {user} u $groupmembers
+                WHERE ud.userid = u.id 
+ 	            	AND month(from_unixtime(ud.data)) = $usermonth
+                    AND day(from_unixtime(ud.data))  = $userday
+                    AND ud.fieldid = $cfg_birthday->fieldname 
+                    AND u.deleted = 0 $groupselect
+				GROUP BY u.id
                 ORDER BY month, day, u.lastname, u.firstname ASC";
-                
-        $pcontext = get_related_contexts_string($this->page->context);
-    
-        if ($pusers = $DB->get_records_sql($sql, 0, 50)) {   // We'll just take the most recent 50 maximum
-            $users = array();
-            foreach ($pusers as $puser) {
-                
-                // if current user can't view hidden role assignment in this context and 
-                // user has a hidden role assigned at this context or any parent contexts,
-                // ignore this user
-                
-                $sql = "SELECT id,id FROM {role_assignments}
-                        WHERE userid = $puser->id
-                        AND contextid $pcontext
-                        AND hidden = 1";
-                
-                if (!has_capability('moodle/role:viewhiddenassigns', $this->page->context) && $DB->record_exists_sql($sql)) {
-                    // can't see this user as the current user has no capability
-                    // and this user has a hidden assignment at this context or higher
-                    continue;  
-                }
-                
-                if ($COURSE->id == SITEID) {
-                    ;  // Site-level
-                } else { // Course-level
-                    if ((!has_capability('moodle/course:viewparticipants', $this->page->context, $USER->id)) or (!has_capability('moodle/course:view',$this->page->context, $puser->id))) {
-                        continue;
-                    }
-                }
-              
-                $puser->fullname = fullname($puser);
-                $users[$puser->id] = $puser;  
-            }
+        	} else {
+            	// Course level - show only enrolled users for now
+	            // TODO: add a new capability for viewing of all users (guests+enrolled+viewing)
+
+    	        list($esqljoin, $eparams) = get_enrolled_sql($this->page->context);
+        	    $params = array_merge($params, $eparams);
+
+            	$sql = "SELECT u.id, u.username, u.firstname, u.lastname, u.picture, u.lastaccess, 
+				u.imagealt, u.email, ud.data, month(from_unixtime(ud.data)) as month, day(from_unixtime(ud.data)) as day
+                FROM {user_info_data} ud, {user} u $groupmembers
+                JOIN ($esqljoin) euj ON euj.id = u.id
+                WHERE ud.userid = u.id 
+	                AND month(from_unixtime(ud.data)) = $usermonth
+                    AND day(from_unixtime(ud.data))  = $userday
+					AND ud.fieldid= $cfg_birthday->fieldname
+                    AND u.deleted = 0 $groupselect
+                GROUP BY u.id
+                ORDER BY month, day, u.lastname, u.firstname ASC";
+
+	            $params['courseid'] = $this->page->course->id;
+        	}
+
+        	if ($pusers = $DB->get_records_sql($sql, $params)) {  
+            	foreach ($pusers as $puser) {
+					$users[$puser->id]=$puser;
+                	$users[$puser->id]->fullname = fullname($puser);
+            	} //Now, we have in $users the list of all users who have upcoming birthdays in the desired range
+        	} 
+		}
+
+		// Verify if we can see the list of users
+		if (!has_capability('block/birthday:viewlist', $this->context)) {
+           	$this->content->text = '<div class="info">'.get_string('nocapabilitytousethisservice','error').'</div>';
+        		return $this->content;
         }
-        } //end of for i loop  
-           
-        //Calculate minutes
-//        $minutes  = floor($timetoshowusers/60);
 
-        $curday = date('M j', time()); //initialize current day
-            //Accessibility: Don't want 'Alt' text for the user picture; DO want it for the envelope/message link (existing lang string).
-            //Accessibility: Converted <div> to <ul>, inherit existing classes & styles.
-                    
-        //Now, we have in users, the list of users to show
-        //Because it is their birthday
-        if (!empty($users)) {
+		if (!empty($users)) { //if there are no users than just print there are no birthdays to show 
+            if (isloggedin() && has_capability('moodle/site:sendmessage', $this->page->context) 
+				&& !empty($CFG->messaging) && !isguestuser()) {
+              	$canshowicon = true;
+	        } else {
+    	        $canshowicon = false;
+        	}
 
-            $this->content->text = '<div class="info">'.get_string("block_title","block_birthday").'</div>';    
-            $this->content->text .= '<ul class="list">';
-            
-            foreach ($users as $user) {
-                if ($curday == get_month_day($user->data,$dateformat)) {
-                    $this->content->text .= '<li class="listentry">';
-                    if ($user->username == 'guest') {
-                        $this->content->text .= '<div class="user">'.print_user_picture($user->id, $COURSE->id, $user->picture, 16, true, false, '', false);
-                        $this->content->text .= get_string('guestuser').'</div>';
-                    } else {
-                        $this->content->text .= '<div class="user"><a href="'.$CFG->wwwroot.'/user/view.php?id='.$user->id.'&amp;course='.$COURSE->id.'">';
-                        $this->content->text .= print_user_picture($user->id, $COURSE->id, $user->picture, 16, true, false, '', false);
-                        $this->content->text .= $user->fullname.'</a></div>';
-                    }
-                    if (!empty($USER->id) and ($USER->id != $user->id) and !empty($CFG->messaging) and 
-                        !isguest() and $user->username != 'guest') {  // Only when logged in and messaging active etc
-                        $this->content->text .= '<div class="message"><a title="'.get_string('messageselectadd').'" href="'.$CFG->wwwroot.'/message/discussion.php?id='.$user->id.'" onclick="this.target=\'message_'.$user->id.'\';return openpopup(\'/message/discussion.php?id='.$user->id.'\', \'message_'.$user->id.'\', \'menubar=0,location=0,scrollbars,status,resizable,width=400,height=500\', 0);">'
-                            .'<img class="iconsmall" src="'.$CFG->pixpath.'/t/message.gif" alt="'. get_string('messageselectadd') .'" /></a></div>';
-                    }
+			$this->content->text = '<div class="info">'.get_string('blocktitle','block_birthday').'</div>';
+           	$userdate = usergetdate(time(),$timezone);
+			$usermonth = $userdate['mon'];
+			$userday = $userdate['mday'];
+			$usercount = 0;
+       		$this->content->text .= '<ul class="list">';
+   	       	foreach ($users as $user) {
+				++$usercount;
+				if (!(($usermonth==$user->month) && ($userday== $user->day))) {
+					if ($usercount==1) {
+						$this->content->text .= '<li class="listentry">'.get_string('nobirthdaystoday','block_birthday').'</li>';
+					}
+					$this->content->text .= '</ul><div class="clearer"><!-- --></div><div class="info">'.userdate($user->data,get_string('strftimedate','block_birthday')).'</div><ul class="list">';
+					$usermonth=$user->month;
+					$userday=$user->day;
+				}							
+					$this->content->text .= '<li class="listentry">';
+	               	if (isguestuser($user)) {
+   		               	$this->content->text .= '<div class="user">'.$OUTPUT->user_picture($user, array('size'=>16));
+   			            $this->content->text .= get_string('guestuser').'</div>';
+           		   	} else {
+               			$this->content->text .= '<div class="user">'.$OUTPUT->user_picture($user, array('size'=>16));
+   	        			$this->content->text .= '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$user->id.'&amp;course='.$this->page->course->id.'" title="'.$user->fullname.'">'.$user->fullname.'</a></div>';
+       				}
+           			if ($canshowicon and ($USER->id != $user->id) and !isguestuser($user)) {  // Only when logged in and messaging active etc
+   	           			$anchortagcontents = '<img class="iconsmall" src="'.$OUTPUT->pix_url('t/message') . '" alt="'. get_string('messageselectadd') .'" />';
+    	            	$anchortag = '<a href="'.$CFG->wwwroot.'/message/index.php?id='.$user->id.'" title="'.get_string('messageselectadd').'">'.$anchortagcontents .'</a>';
 
-                    $this->content->text .= '</li>';
-                } else {
-                    $this->content->text .= '</ul><div class="clearer"><!-- --></div>';
-                    
-                    $curday = get_month_day($user->data,$dateformat); //if we have switched days then set the current day to the new day
-                    $this->content->text .= '<div class="info">'.$curday.'</div>';
-                    $this->content->text .= '<ul class="list">';
-                    $this->content->text .= '<li class="listentry">';
-         
-                    if ($user->username == 'guest') {
-                        $this->content->text .= '<div class="user">'.print_user_picture($user->id, $COURSE->id, $user->picture, 16, true, false, '', false);
-                        $this->content->text .= get_string('guestuser').'</div>';
-                    } else {
-                        $this->content->text .= '<div class="user"><a href="'.$CFG->wwwroot.'/user/view.php?id='.$user->id.'&amp;course='.$COURSE->id.'">';
-                        $this->content->text .= print_user_picture($user->id, $COURSE->id, $user->picture, 16, true, false, '', false);
-                        $this->content->text .= $user->fullname.'</a></div>';
-                    }
-                    if (!empty($USER->id) and ($USER->id != $user->id) and !empty($CFG->messaging) and 
-                        !isguest() and $user->username != 'guest') {  // Only when logged in and messaging active etc
-                        $this->content->text .= '<div class="message"><a title="'.get_string('messageselectadd').'" href="'.$CFG->wwwroot.'/message/discussion.php?id='.$user->id.'" onclick="this.target=\'message_'.$user->id.'\';return openpopup(\'/message/discussion.php?id='.$user->id.'\', \'message_'.$user->id.'\', \'menubar=0,location=0,scrollbars,status,resizable,width=400,height=500\', 0);">'
-                            .'<img class="iconsmall" src="'.$CFG->pixpath.'/t/message.gif" alt="'. get_string('messageselectadd') .'" /></a></div>';
-                    }
-
-                    $this->content->text .= '</li>';
-                }
-            }
-            $this->content->text .= '</ul><div class="clearer"><!-- --></div>';
-       } else {
-            $this->content->text .= '<div class="info">'.get_string("nobirthdays","block_birthday").'</div>';
-            if (!empty($cfg_birthday->block_birthday_visible)) {
-                if ($cfg_birthday->block_birthday_visible=='Hide') { //block is hidden when empty
-                    $this->content->text = '';
-                } 
-            } 
-        }
+        	        	$this->content->text .= '<div class="message">'.$anchortag.'</div>';
+           			}
+					$this->content->text .= '</li>';
+			}
+       		$this->content->text .= '</ul><div class="clearer"><!-- --></div>';
+		} else {
+		    $this->content->text = '<div class="info">'.get_string('nobirthdaystoday','block_birthday').'</div>';
+		    if (!empty($cfg_birthday->visible)) {
+                	if ($cfg_birthday->visible=='Hide') { //block is hidden when empty
+                    	    $this->content->text = '';
+                	}
+            	    }	
+		}
         return $this->content;
-    } //get_content
+    }
 }
-
-?>

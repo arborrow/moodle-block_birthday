@@ -19,7 +19,7 @@
 
 function xmldb_block_birthday_upgrade($oldversion=0) {
 
-    global $CFG, $THEME, $db;
+    global $CFG, $THEME;
 
     $result = true;
 
