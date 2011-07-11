@@ -1,6 +1,18 @@
-<?PHP // $Id: block_birthday.php,v 1.4 2008/01/03 01:35:15 arborrow Exp $ 
-      // block_birthday.php - created with Moodle 1.9 Beta + (2007083101)
-
+<?PHP
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 $string['birthday'] = '誕生日';
 $string['block_title'] = '今日の誕生日';
@@ -16,5 +28,3 @@ $string['happybirthday'] = 'お誕生日おめでとうございます!';
 $string['nobirthdays'] = '今日の誕生日はありません。';
 $string['periodnminutes'] = 'ラスト $a 分';
 $string['user_info_field_shortname'] = 'ユーザの誕生日を含むユニークなユーザプロフィールフィールド省略名を入力してください (デフォルト省略名は「DOB」です)。';
-
-?>
