@@ -103,6 +103,7 @@ class block_birthday extends block_base {
                     AND day(from_unixtime(ud.data))  = $userday
                     AND ud.fieldid = $cfg_birthday->fieldname
                     AND u.deleted = 0 $groupselect
+                    AND ud.data > 0 
                 GROUP BY u.id
                 ORDER BY month, day, u.lastname, u.firstname ASC";
             } else {
@@ -122,6 +123,7 @@ class block_birthday extends block_base {
                     AND day(from_unixtime(ud.data))  = $userday
                     AND ud.fieldid= $cfg_birthday->fieldname
                     AND u.deleted = 0 $groupselect
+                    AND ud.data > 0 
                 GROUP BY u.id
                 ORDER BY month, day, u.lastname, u.firstname ASC";
 
